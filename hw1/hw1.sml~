@@ -1,0 +1,14 @@
+fun is_older (date1: int * int * int, date2: int * int * int) =
+    let
+	val dl1 = [#1 date1, #2 date1, #3 date1];
+	val dl2 = [#1 date2, #2 date2, #3 date2];
+	fun compare(Dl1: int list, Dl2 int list) =
+	    if null (tl Dl1)
+	    then
+		hd Dl1 < hd Dl2
+	    else
+		if hd Dl1 = hd Dl2
+		then
+		    compare(tl Dl1, tl Dl2)
+		else
+		    hd Dl1 < hd Dl2
