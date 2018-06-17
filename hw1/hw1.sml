@@ -1,3 +1,4 @@
+(* 100-score hm solution *)
 fun is_older (date1: int * int * int, date2: int * int * int) =
     let
 	val dl1 = [#1 date1, #2 date1, #3 date1];
