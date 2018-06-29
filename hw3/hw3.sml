@@ -101,13 +101,22 @@ fun first_answer f questions =
 		    | SOME v => v
 
 fun all_answers f questions =
-    case questions of
-	[] => NONE
-      | hd::tl => case f hd of
-		      NONE => all_answers f tl
-		    | SOME hdv => case all_answers f tl of
-				      NONE => SOME hdv
-				    | SOME tlv => SOME (hdv @ tlv)
+    let fun helper (acc,lst) =
+	    case lst of
+		[] => SOME acc
+	      | hd::tl => case f hd of
+			      NONE => helper(acc,tl)
+			    | SOME hdl => helper(hdl@acc,tl)
+    in
+	case questions of
+	    [] => SOME []
+	  | _ => case helper ([],questions) of
+		     SOME [] => NONE
+		  | _ =>  helper ([],questions)
+	    
+    end
+	
+
 
 
 fun count_wildcards p =
