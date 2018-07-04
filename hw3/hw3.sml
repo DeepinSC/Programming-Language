@@ -36,30 +36,48 @@ datatype typ = Anything
 	     | TupleT of typ list
 	     | Datatype of string
 
-fun typecheck_patterns (cl,pl) =
-    let
-	fun pat2typ p =
+fun comp2typ (t1, t2) =
+	    case (t1,t2) of
+		(Anything,_) => t2
+	      | (_,Anything) => t1
+	      | (TupleT l1, TupleT l2) => if length l1 <> length l2
+					  then
+					      Datatype "error"
+					  else
+					      TupleT (map comp2typ (ListPair.zip(l1,l2)))
+	      | _ => if t1 = t2 then t1 else Datatype "error"
+			       
+fun pat2typ cl p  =
 	    case p of
-		ConstructorP (str,pat) => (case List.find (fn (name,_,_) => name=str) cl of
-					      NONE => raise NoAnswer
+		ConstructorP (str,pat) =>
+		(case List.find (fn (name,dt,typ) => name=str andalso comp2typ (pat2typ cl pat,typ) <> (Datatype "error")) cl of
+					      NONE => Datatype "error"
 					    | SOME (name,dt,_) => Datatype dt)
 	      | UnitP => UnitT
 	      | Variable s => Anything
 	      | ConstP i => IntT
-	      | TupleP plist => TupleT (map pat2typ plist)
+	      | TupleP plist => TupleT (map (pat2typ cl) plist )
 	      | _ => Anything
+
+
+			 
+fun typecheck_patterns (cl,pl) =
+    let
+	
+						  
 	fun all_same lst =
 	    case lst of
 		hd::[] => SOME hd
-	      | hd::hd2::tl => if hd=hd2
-			       then
-				   all_same (hd2::tl)
-			       else
-				   NONE
+	      | hd::hd2::tl => all_same(comp2typ(hd,hd2)::tl)				  
 	      | _ => NONE
 			 
     in
-	all_same (map pat2typ pl)
+	case all_same (map (pat2typ cl) pl) of
+	    SOME p => (case p of
+			   Datatype "error" => NONE
+			 | _ => SOME p)
+	 | _ => NONE
+		     
     end
 	
 		
@@ -75,17 +93,13 @@ fun longest_string1 sl =
 fun longest_string2 sl =
     foldl (fn (str, lstr) => if String.size str >= String.size lstr then str else lstr) "" sl
 
-fun longest_string_helper f sl str =
-    case sl of
-	[] => str
-      | hd::tl => if f(String.size hd, String.size str)
-		  then
-		      longest_string_helper f tl hd
-		  else
-		      longest_string_helper f tl str
-
-val longest_string3 = fn x => longest_string_helper (fn (a,b)=> a > b) x "";
-val longest_string4 = fn x => longest_string_helper (fn (a,b)=> a >= b) x "";
+fun longest_string_helper f = 
+    List.foldl (fn (s,sofar) => if f(String.size s,String.size sofar)
+				then s
+				else sofar) 
+	                              ""
+val longest_string3 = longest_string_helper op> ;
+val longest_string4 = longest_string_helper op>= ;
 
 val longest_capitalized = longest_string1 o only_capitals;
 
@@ -99,24 +113,17 @@ fun first_answer f questions =
       | hd::tl => case f hd of
 		      NONE => first_answer f tl
 		    | SOME v => v
-
-fun all_answers f questions =
-    let fun helper (acc,lst) =
-	    case lst of
-		[] => SOME acc
-	      | hd::tl => case f hd of
-			      NONE => helper(acc,tl)
-			    | SOME hdl => helper(hdl@acc,tl)
-    in
-	case questions of
-	    [] => SOME []
-	  | _ => case helper ([],questions) of
-		     SOME [] => NONE
-		  | _ =>  helper ([],questions)
-	    
-    end
 	
-
+fun all_answers f xs =
+    let fun loop (acc,xs) =
+            case xs of
+		[] => SOME acc
+	      | x::xs' => case f x of
+			      NONE => NONE
+			    | SOME y => loop((y @ acc), xs')
+    in
+	loop ([],xs)
+    end
 
 
 fun count_wildcards p =
@@ -146,32 +153,19 @@ fun check_pat p =
     end
 
 fun match (v,p) =
-    case p of
-	Wildcard => SOME []
-      | Variable s => SOME [(s,v)]
-      | UnitP => (case v of
-		     Unit => SOME []
-		   | _ => NONE)
-      | ConstP i => (case v of
-			 Const iv => if iv = i then SOME [] else NONE
-		       | _ => NONE)
-      | TupleP ps => (case v of
-			  Tuple vs => if length ps = length vs
-				      then
-					  all_answers match (ListPair.zip(vs,ps))
-				      else
-					  NONE
-			| _ => NONE
-		     )
-      | ConstructorP (s1,p) => (case v of
-				    Constructor(s2,v) => if s1=s2
-							 then
-							     match(v,p)
-							 else
-							     NONE
-				  | _ => NONE)
+    case (v,p) of
+	(_,Wildcard)    => SOME []
+      | (_,Variable(s)) => SOME [(s,v)]
+      | (Unit,UnitP)    => SOME []
+      | (Const i, ConstP j)    => if i=j then SOME [] else NONE
+      | (Tuple(vs),TupleP(ps)) => if length vs = length ps
+				  then all_answers match (ListPair.zip(vs,ps))
+				  else NONE
+      | (Constructor(s1,v), ConstructorP(s2,p)) => if s1=s2
+						   then match(v,p)
+                                                   else NONE
+      | _ => NONE
 				   
 fun first_match v pl =
-    first_answer (fn p => case match (v,p) of
-			      NONE => NONE
-			   | SOME lst => SOME (SOME lst)) pl handle NoAnswer => NONE
+    SOME (first_answer (fn pat => match (v,pat)) pl)
+    handle NoAnswer => NONE
